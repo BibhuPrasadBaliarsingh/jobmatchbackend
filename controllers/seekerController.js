@@ -1,6 +1,66 @@
 const User = require('../models/User');
 const Match = require('../models/Match');
 const Notification = require('../models/Notification');
+const fs = require('fs');
+const path = require('path');
+
+// @desc    Upload/replace seeker resume
+// @route   POST /api/seeker/resume
+// @access  Private (seeker)
+const uploadResume = async (req, res) => {
+  try {
+    const { fileName, mimeType, dataBase64 } = req.body || {};
+    if (!dataBase64 || !mimeType) {
+      return res.status(400).json({ success: false, message: 'Missing resume data. Provide mimeType and dataBase64.' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    const allowed = new Set([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]);
+    if (!allowed.has(mimeType)) {
+      return res.status(400).json({ success: false, message: 'Only PDF/DOC/DOCX resumes are allowed.' });
+    }
+
+    // Rough size check: base64 length * 3/4 = bytes (minus padding)
+    const approxBytes = Math.floor((dataBase64.length * 3) / 4);
+    if (approxBytes > 5 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: 'Resume must be 5MB or less.' });
+    }
+
+    const resumesDir = path.join(__dirname, '..', 'uploads', 'resumes');
+    if (!fs.existsSync(resumesDir)) fs.mkdirSync(resumesDir, { recursive: true });
+
+    const safeOriginal = (fileName || 'resume')
+      .replace(/[^a-zA-Z0-9.\-_]/g, '_')
+      .slice(0, 80);
+    const extFromName = path.extname(safeOriginal);
+    const ext =
+      extFromName ||
+      (mimeType === 'application/pdf'
+        ? '.pdf'
+        : mimeType === 'application/msword'
+          ? '.doc'
+          : '.docx');
+    const base = path.basename(safeOriginal, ext) || 'resume';
+    const filename = `${req.user._id.toString()}_${Date.now()}_${base}${ext}`;
+
+    const filePath = path.join(resumesDir, filename);
+    fs.writeFileSync(filePath, Buffer.from(dataBase64, 'base64'));
+
+    const resumeUrl = `${req.protocol}://${req.get('host')}/uploads/resumes/${filename}`;
+    user.resumeUrl = resumeUrl;
+    await user.save();
+
+    res.json({ success: true, message: 'Resume uploaded successfully.', data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // @desc    Update seeker profile
 // @route   PUT /api/seeker/profile
@@ -96,4 +156,4 @@ const respondToMatch = async (req, res) => {
   }
 };
 
-module.exports = { updateProfile, getDashboard, respondToMatch };
+module.exports = { uploadResume, updateProfile, getDashboard, respondToMatch };
