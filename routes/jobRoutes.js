@@ -12,7 +12,7 @@ router.get('/:id', getJob);
 router.post(
   '/',
   protect,
-  authorize('recruiter'),
+  authorize('recruiter', 'admin'),
   [
     body('title').trim().notEmpty().withMessage('Job title is required'),
     body('description').trim().notEmpty().withMessage('Description is required'),
@@ -24,7 +24,7 @@ router.post(
   createJob
 );
 
-router.put('/:id', protect, authorize('recruiter'), updateJob);
+router.put('/:id', protect, authorize('recruiter', 'admin'), updateJob);
 router.delete('/:id', protect, authorize('recruiter', 'admin'), deleteJob);
 
 module.exports = router;

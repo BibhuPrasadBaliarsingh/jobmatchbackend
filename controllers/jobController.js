@@ -80,10 +80,14 @@ const getJob = async (req, res) => {
 
 // @desc    Update job
 // @route   PUT /api/jobs/:id
-// @access  Private (recruiter - own jobs only)
+// @access  Private (recruiter - own jobs / admin)
 const updateJob = async (req, res) => {
   try {
-    const job = await Job.findOne({ _id: req.params.id, recruiter: req.user._id });
+    const filter = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, recruiter: req.user._id };
+
+    const job = await Job.findOne(filter);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found or unauthorized.' });
 
     Object.assign(job, req.body);
