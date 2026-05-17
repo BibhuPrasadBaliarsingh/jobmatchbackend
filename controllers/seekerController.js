@@ -67,7 +67,28 @@ const uploadResume = async (req, res) => {
 // @access  Private (seeker)
 const updateProfile = async (req, res) => {
   try {
-    const { name, phone, location, skills, experienceYears, experienceDescription, preferredRoles, bio } = req.body;
+    const {
+      name,
+      phone,
+      location,
+      skills,
+      experienceYears,
+      experienceDescription,
+      preferredRoles,
+      bio,
+      gender,
+      employmentType,
+      district,
+      state,
+      dateOfBirth,
+      highestQualification,
+      applyFor,
+      preferredJobLocation,
+      isFresher,
+      expectedSalary,
+      hasBike,
+      hasDrivingLicense,
+    } = req.body;
 
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
@@ -80,6 +101,18 @@ const updateProfile = async (req, res) => {
     if (experienceDescription) user.experienceDescription = experienceDescription;
     if (preferredRoles) user.preferredRoles = preferredRoles;
     if (bio) user.bio = bio;
+    if (gender) user.gender = gender;
+    if (employmentType) user.employmentType = employmentType;
+    if (district) user.district = district;
+    if (state) user.state = state;
+    if (dateOfBirth) user.dateOfBirth = new Date(dateOfBirth);
+    if (highestQualification) user.highestQualification = highestQualification;
+    if (applyFor) user.applyFor = applyFor;
+    if (preferredJobLocation) user.preferredJobLocation = preferredJobLocation;
+    if (isFresher !== undefined) user.isFresher = isFresher;
+    if (expectedSalary !== undefined) user.expectedSalary = expectedSalary;
+    if (hasBike !== undefined) user.hasBike = hasBike;
+    if (hasDrivingLicense !== undefined) user.hasDrivingLicense = hasDrivingLicense;
 
     user.checkProfileComplete();
     await user.save();

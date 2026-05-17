@@ -6,16 +6,22 @@ const { generateToken } = require('../middleware/auth');
 // @access  Public
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, location, companyName } = req.body;
+      let { name, email, password, role, phone, location, companyName } = req.body;
+    phone = phone?.trim();
+    email = email?.trim();
 
     // Only allow seeker/recruiter registration via this route
     if (!['seeker', 'recruiter'].includes(role)) {
       return res.status(400).json({ success: false, message: 'Invalid role specified.' });
     }
 
-    const existingUser = await User.findOne({ email });
+    if (!email) {
+      email = `${phone}@jobmatch.local`;
+    }
+
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
-      return res.status(409).json({ success: false, message: 'Email already registered.' });
+      return res.status(409).json({ success: false, message: existingUser.phone === phone ? 'Phone already registered.' : 'Email already registered.' });
     }
 
     const userData = { name, email, password, role, phone, location };
@@ -56,35 +62,31 @@ const register = async (req, res) => {
 // @access  Public
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, phone, password } = req.body;
 
-    // Check for admin credentials
-    if (
-      email === process.env.ADMIN_EMAIL &&
-      password === process.env.ADMIN_PASSWORD
-    ) {
-      let admin = await User.findOne({ email, role: 'admin' });
-      if (!admin) {
-        admin = await User.create({
-          name: 'Admin',
+    const query = email ? { email } : { phone };
+    let user = await User.findOne(query).select('+password');
+
+    const adminLoginMatch =
+      process.env.ADMIN_EMAIL && email && email === process.env.ADMIN_EMAIL ||
+      process.env.ADMIN_PHONE && phone && phone === process.env.ADMIN_PHONE;
+
+    if (!user && adminLoginMatch) {
+      user = await User.findOne({ email: process.env.ADMIN_EMAIL, role: 'admin' }).select('+password');
+      if (!user) {
+        user = await User.create({
+          name: 'Administrator',
           email: process.env.ADMIN_EMAIL,
+          phone: process.env.ADMIN_PHONE || phone,
           password: process.env.ADMIN_PASSWORD,
           role: 'admin',
         });
+        user = await User.findById(user._id).select('+password');
       }
-      const token = generateToken(admin._id, 'admin');
-      return res.json({
-        success: true,
-        data: {
-          token,
-          user: { _id: admin._id, name: admin.name, email: admin.email, role: 'admin' },
-        },
-      });
     }
 
-    const user = await User.findOne({ email }).select('+password');
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      return res.status(401).json({ success: false, message: 'Invalid phone or password.' });
     }
 
     const isMatch = await user.comparePassword(password);
@@ -131,4 +133,43 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe };
+// @desc    Change password
+// @route   PUT /api/auth/change-password
+// @access  Private
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // For admin users created via env credentials, they may not have a stored password hash
+    if (!user.password) {
+      return res.status(400).json({ success: false, message: 'Password change not available for this account type.' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ success: true, message: 'Password changed successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { register, login, getMe, changePassword };

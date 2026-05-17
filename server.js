@@ -4,8 +4,9 @@ const cors = require('cors');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const path = require('path');
+const User = require('./models/User');
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 
@@ -62,13 +63,39 @@ app.use('*', (req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
+const createDefaultAdmin = async () => {
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+    return;
+  }
+
+  const existingAdmin = await User.findOne({ email: process.env.ADMIN_EMAIL, role: 'admin' });
+  if (existingAdmin) {
+    return;
+  }
+
+  const adminData = {
+    name: 'Administrator',
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
+    role: 'admin',
+  };
+
+  if (process.env.ADMIN_PHONE) {
+    adminData.phone = process.env.ADMIN_PHONE;
+  }
+
+  await User.create(adminData);
+  console.log('✅ Default admin user created in MongoDB');
+};
+
 // Connect to MongoDB and start server
 const PORT = process.env.PORT || 5000;
 
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB connected');
+    await createDefaultAdmin();
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
   .catch((err) => {

@@ -13,6 +13,19 @@ const createJob = async (req, res) => {
       companyName: req.body.companyName || recruiter.companyName || recruiter.name,
     };
 
+    // Parse JSON fields from FormData
+    if (typeof jobData.requiredSkills === 'string') {
+      jobData.requiredSkills = JSON.parse(jobData.requiredSkills);
+    }
+    if (typeof jobData.salaryRange === 'string') {
+      jobData.salaryRange = JSON.parse(jobData.salaryRange);
+    }
+
+    // Handle logo file upload
+    if (req.file) {
+      jobData.logo = `/uploads/logos/${req.file.filename}`;
+    }
+
     const job = await Job.create(jobData);
     res.status(201).json({ success: true, message: 'Job posted successfully.', data: job });
   } catch (err) {
@@ -43,7 +56,7 @@ const getJobs = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const [jobs, total] = await Promise.all([
       Job.find(query)
-        .populate('recruiter', 'name email')
+        .populate('recruiter', 'name email phone companyName')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
@@ -70,7 +83,7 @@ const getJobs = async (req, res) => {
 // @access  Public
 const getJob = async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id).populate('recruiter', 'name email companyName location');
+    const job = await Job.findById(req.params.id).populate('recruiter', 'name email phone companyName location');
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
     res.json({ success: true, data: job });
   } catch (err) {
